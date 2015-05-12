@@ -1,0 +1,110 @@
+/// @file
+/// @brief このエフェクトを中心にキューブ環境マップをレンダリングする。
+/// @author ruche
+
+#include "shader/common.h"
+
+////////////////////////////////////////
+// 変数定義
+
+/// エフェクト定義。
+float Script : STANDARDSGLOBAL <
+    string ScriptOutput = "color";
+    string ScriptClass = "scene";
+    string ScriptOrder = "postprocess";
+> = 0.8f;
+
+/// 環境マップのオフスクリーンレンダーターゲット。
+texture EnvMapRT : OFFSCREENRENDERTARGET <
+    string Description = "環境マップのレンダーターゲット";
+    int Width = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE);
+    int Height = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE);
+    float4 ClearColor = float4(1, 1, 1, 1);
+    float ClearDepth = 1;
+    string Format = UE4LIKEIBL_ENVMAP_FORMAT;
+    bool AntiAlias = false;
+    int Miplevels = 1;
+    string DefaultEffect =
+        "self=hide;"
+        "*=shader/EnvMapRT.fxm;"; >;
+
+/// 環境マップのオフスクリーンレンダーターゲットのサンプラ。
+sampler EnvMapRTSampler =
+    sampler_state
+    {
+        Texture = <EnvMapRT>;
+        MinFilter = LINEAR;
+        MagFilter = LINEAR;
+        AddressU = CLAMP;
+        AddressV = CLAMP;
+    };
+
+// 環境マップのコピー先テクスチャ＆サンプラ定義
+UE4LIKEIBL_ENVMAP_DEF;
+
+/// 深度ステンシルバッファ。
+texture DepthBuffer : RENDERDEPTHSTENCILTARGET <
+    float2 ViewportRatio = float2(1, 1); >;
+
+/// クリア色。
+float4 ClearColor = float4(1, 1, 1, 1);
+
+/// クリア深度値。
+float ClearDepth = 1;
+
+////////////////////////////////////////
+// シェーダ処理
+
+/// 頂点シェーダ出力構造体。
+struct VSOutput
+{
+    float4 pos : POSITION;
+    float2 tex : TEXCOORD0;
+};
+
+/// 頂点シェーダ処理を行う。
+VSOutput RunVS(MMM_SKINNING_INPUT IN)
+{
+    VSOutput vsOut = (VSOutput)0;
+
+    vsOut.pos = IN.Pos;
+    vsOut.tex = IN.Tex;
+
+    return vsOut;
+}
+
+/// ピクセルシェーダ処理を行う。
+float4 RunPS(float2 tex : TEXCOORD0) : COLOR
+{
+    // 単にオフスクリーンレンダーターゲットから色をコピーする
+    return tex2D(EnvMapRTSampler, tex);
+}
+
+////////////////////////////////////////
+// テクニック
+
+/// メインテクニック定義。
+technique Effect <
+    string Script =
+        "RenderColorTarget0=ULI_EnvMap;"
+        "RenderDepthStencilTarget=DepthBuffer;"
+        "ClearSetColor=ClearColor;"
+        "ClearSetDepth=ClearDepth;"
+        "Clear=Color;"
+        "Clear=Depth;"
+        "Pass=DrawEnvMap;"
+        "RenderColorTarget0=;"
+        "RenderDepthStencilTarget=;"; >
+{
+    pass DrawEnvMap < string Script = "Draw=Buffer;"; >
+    {
+        AlphaBlendEnable = false;
+        VertexShader = compile vs_3_0 RunVS();
+        PixelShader = compile ps_3_0 RunPS();
+    }
+}
+
+// エッジ等は描画しない
+technique EdgeTec < string MMDPass = "edge"; > { }
+technique ShadowTec < string MMDPass = "shadow"; > { }
+technique ZplotTec < string MMDPass = "zplot"; > { }
