@@ -46,16 +46,17 @@
         AddressV = CLAMP; }
 
 /// 環境BRDF項を事前計算した Look-up テクスチャファイルパス。
-#define UE4LIKEIBL_LUT_NAME "texture/lut.png"
+#define UE4LIKEIBL_LUT_NAME "texture/lut.dds"
 
 /// Hammersley のY座標を事前計算したテクスチャファイルパス。
-#define UE4LIKEIBL_HAMMERSLEY_Y_TEX_NAME "texture/hammersley_y.png"
+#define UE4LIKEIBL_HAMMERSLEY_Y_TEX_NAME "texture/hammersley_y.dds"
 
 /// Hammersley のY座標を事前計算したテクスチャのサンプリング数。(＝横幅)
 #define UE4LIKEIBL_HAMMERSLEY_Y_TEX_SAMPLE_COUNT 1024
 
-/// 環境マップの Hammerslay 座標サンプリング数。
-/// 16 以上 UE4LIKEIBL_HAMMERSLEY_Y_TEX_SAMPLE_COUNT 以下かつ 2 の累乗値。
-#define UE4LIKEIBL_ENVMAP_SAMPLE_COUNT 32
+/// @brief 環境マップの Hammerslay 座標サンプリング数。 16 以上かつ 2 の累乗値。
+///
+/// 数値が大きいほどいいのだが、 256 以上にするとループ回数制限に引っかかる模様。
+#define UE4LIKEIBL_ENVMAP_SAMPLE_COUNT 128
 
 #endif // UE4LIKEIBL_SHADER_COMMON_H
