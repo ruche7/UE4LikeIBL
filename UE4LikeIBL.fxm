@@ -12,6 +12,9 @@
 
 #include "shader/common.h"
 
+/// 環境マップのサンプリングに事前計算した Look-up テクスチャを用いるか否か。
+#define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED 1
+
 ////////////////////
 // 設定ここから
 ////////////////////
@@ -51,9 +54,6 @@ float3 ULI_Specular <
 
 // 環境マップのコピー先テクスチャ＆サンプラ定義
 UE4LIKEIBL_ENVMAP_DEF;
-
-/// 環境マップのサンプリングに事前計算した Look-up テクスチャを使うか否か。
-#define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED 1
 
 #if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
 

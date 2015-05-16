@@ -4,6 +4,9 @@
 
 #include "shader/common.h"
 
+/// Equirectangular projection マップへの変換用テクスチャを用いるか否か。
+#define UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED 1
+
 ////////////////////////////////////////
 // 変数定義
 
@@ -36,8 +39,8 @@ sampler EnvMapRTSampler =
     sampler_state
     {
         Texture = <EnvMapRT>;
-        MinFilter = LINEAR;
-        MagFilter = LINEAR;
+        MinFilter = POINT;
+        MagFilter = POINT;
         AddressU = WRAP;
         AddressV = CLAMP;
     };
@@ -54,6 +57,25 @@ float4 ClearColor = float4(0, 0, 0, 1);
 
 /// クリア深度値。
 float ClearDepth = 1;
+
+#if UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED
+
+/// Equirectangular projection マップへの変換用テクスチャ。
+texture2D ULI_CubeTransTexture <
+    string ResourceName = UE4LIKEIBL_ENVMAP_TRANS_TEX_NAME; >;
+
+/// Equirectangular projection マップへの変換用テクスチャのサンプラ。
+sampler ULI_CubeTransTexSampler =
+    sampler_state
+    {
+        Texture = <ULI_CubeTransTexture>;
+        MinFilter = POINT;
+        MagFilter = POINT;
+        AddressU = WRAP;
+        AddressV = CLAMP;
+    };
+
+#endif // UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED
 
 ////////////////////////////////////////
 // シェーダ処理
@@ -89,6 +111,13 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
     // コピー先テクスチャが Equirectangular projection となるようにサンプリングする。
     // コピー先テクスチャの中心点は +Z 面の中心点とする。
 
+#if UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED
+
+    // 事前計算テクスチャからキューブマップのUV座標を得る
+    float2 pos = tex2D(ULI_CubeTransTexSampler, tex).rg;
+
+#else // UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED
+
     // V 成分は視線ベクトルとXZ平面との角度に線形対応
     // V==0.0 => -π/2
     // V==0.5 => 0
@@ -115,13 +144,13 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
         if (v.z < 0)
         {
             // -Z
-            pos = float2(-v.x / av.z, v.y / av.z);
+            pos = float2(-v.x, v.y) / av.z;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ;
         }
         else
         {
             // +Z
-            pos = float2(v.x / av.z, v.y / av.z);
+            pos = float2(v.x, v.y) / av.z;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ;
         }
     }
@@ -130,13 +159,13 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
         if (v.y < 0)
         {
             // -Y
-            pos = float2(v.x / av.y, v.z / av.y);
+            pos = float2(v.x, v.z) / av.y;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY;
         }
         else
         {
             // +Y
-            pos = float2(v.x / av.y, -v.z / av.y);
+            pos = float2(v.x, -v.z) / av.y;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY;
         }
     }
@@ -145,13 +174,13 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
         if (v.x < 0)
         {
             // -X
-            pos = float2(v.z / av.x, v.y / av.x);
+            pos = float2(v.z, v.y) / av.x;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX;
         }
         else
         {
             // +X
-            pos = float2(-v.z / av.x, v.y / av.x);
+            pos = float2(-v.z, v.y) / av.x;
             trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX;
         }
     }
@@ -162,6 +191,8 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
     // UV座標系に変換
     pos.x = pos.x * 0.5f + 0.5f;
     pos.y = -pos.y * 0.5f + 0.5f;
+
+#endif // UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED
 
     // キューブマップからサンプリング
     return tex2D(EnvMapRTSampler, pos);

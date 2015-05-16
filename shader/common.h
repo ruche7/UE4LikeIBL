@@ -47,6 +47,9 @@
         AddressU = WRAP; \
         AddressV = CLAMP; }
 
+/// キューブマップから Equirectangular projection マップに変換するためのテクスチャファイルパス。
+#define UE4LIKEIBL_ENVMAP_TRANS_TEX_NAME "texture/cube_trans.dds"
+
 /// 環境マップのサンプリングUVを事前計算した Look-up テクスチャファイルパス。
 #define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_NAME "texture/lookup_envmap.dds"
 
