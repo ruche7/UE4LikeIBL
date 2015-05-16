@@ -38,13 +38,13 @@ float ULI_Roughness <
 /// スペキュラ値をUIで指定するか。 true ならば後述の ULI_Specular を使う。
 bool ULI_UseSpecular <
     string UIName = "UseSpecular";
-> = false;
+> = true;
 
 /// スペキュラカラー値。 ULI_UseSpecular が true ならば本来の値を上書きする。
 float3 ULI_Specular <
     string UIName = "Specular";
     string UIWidget = "Color";
-> = float3(0, 0, 0);
+> = float3(0.5f, 0.5f, 0.5f);
 
 ////////////////////
 // 設定ここまで
@@ -200,7 +200,7 @@ float3  ULI_ImportanceSampleGGX(float2 xi, float roughness, float3 normal)
 /// @brief UE4の事前フィルタリングされた環境マップに相当する色をサンプリングする。
 /// @param[in] roughness ラフネス値。
 /// @param[in] normal 法線ベクトル値。
-/// @param[in] v 視点ベクトル値。
+/// @param[in] eye 視点ベクトル値。
 /// @param[in] sampleCount 総サンプリング数。
 /// @return サンプリング結果の色。
 ///
@@ -209,7 +209,7 @@ float3  ULI_ImportanceSampleGGX(float2 xi, float roughness, float3 normal)
 float3 ULI_PrefilterEnvMap(
     float roughness,
     float3 normal,
-    float3 v,
+    float3 eye,
     uniform uint sampleCount)
 {
     float3 color = 0;
@@ -219,12 +219,12 @@ float3 ULI_PrefilterEnvMap(
     {
         float2 xi = ULI_Hammersley(i, sampleCount);
         float3 h = ULI_ImportanceSampleGGX(xi, roughness, normal);
-        float3 l = 2 * dot(v, h) * h - v;
+        float3 l = 2 * dot(eye, h) * h - eye;
 
         float nlDot = saturate(dot(normal, l));
         if (nlDot > 0)
         {
-            color += ULI_SampleEnvMap(l).rgb * nlDot;
+            color.rgb += ULI_SampleEnvMap(l).rgb * nlDot;
             weight += nlDot;
         }
     }
@@ -236,19 +236,17 @@ float3 ULI_PrefilterEnvMap(
 /// @param[in] specular スペキュラ色。
 /// @param[in] roughness ラフネス値。
 /// @param[in] normal 法線ベクトル値。
-/// @param[in] v 視点ベクトル値。
+/// @param[in] eye 視点ベクトル値。
 /// @return 計算結果の色。
-float3 ULI_ApproximateSpecularIBL(
-    float3 specular,
-    float roughness,
-    float3 normal,
-    float3 v)
+float3 ULI_SpecularIBL(float3 specular, float roughness, float3 normal, float3 eye)
 {
     float3 color =
-        ULI_PrefilterEnvMap(roughness, normal, v, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
-    float2 brdf = ULI_IntegrateBRDF(roughness, saturate(dot(normal, v)));
+        ULI_PrefilterEnvMap(roughness, normal, eye, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
+    float2 brdf = ULI_IntegrateBRDF(roughness, saturate(dot(normal, eye)));
 
-    return (color * (specular * brdf.x + brdf.y));
+    color.rgb *= (specular.rgb * brdf.x) + (saturate(specular.g * 50) * brdf.y);
+
+    return color;
 }
 
 ////////////////////
@@ -257,8 +255,8 @@ float3 ULI_ApproximateSpecularIBL(
 
 #endif // UE4LIKEIBL_ENABLED
 
-// 以下は SampleBase.fxm をコピペしてコード追加したもの。
-// 追加箇所は #if UE4LIKEIBL_ENABLED ～ #endif で括られている。
+// 以下は SampleBase.fxm をコピペしてコード変更したもの。
+// 変更箇所は #if ～ #endif で括られている。
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  MikuMikuMoving用サンプルシェーダ
@@ -308,6 +306,36 @@ float3   LightDiffuses[MMM_LightCount]      : LIGHTDIFFUSECOLORS;
 float3   LightAmbients[MMM_LightCount]      : LIGHTAMBIENTCOLORS;
 float3   LightSpeculars[MMM_LightCount]     : LIGHTSPECULARCOLORS;
 
+#if UE4LIKEIBL_ENABLED
+
+/// メタリック補正済みのマテリアルディフューズ色。
+static float4 ULI_IBLDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
+
+/// メタリック補正済み＆ライト適用済みディフューズ色。
+static float4 DiffuseColor[MMM_LightCount] =
+    {
+        ULI_IBLDiffuse * float4(LightDiffuses[0], 1.0f),
+        ULI_IBLDiffuse * float4(LightDiffuses[1], 1.0f),
+        ULI_IBLDiffuse * float4(LightDiffuses[2], 1.0f),
+    };
+
+/// ライト適用済みアンビエント色。
+static float3 AmbientColor[MMM_LightCount] =
+    {
+        saturate(MaterialAmbient * LightAmbients[0]) + MaterialEmmisive,
+        saturate(MaterialAmbient * LightAmbients[1]) + MaterialEmmisive,
+        saturate(MaterialAmbient * LightAmbients[2]) + MaterialEmmisive,
+    };
+
+/// ライト適用済みスペキュラ色。
+static float3 SpecularColor[MMM_LightCount] =
+    {
+        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[0],
+        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[1],
+        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[2],
+    };
+
+#else // UE4LIKEIBL_ENABLED
 // ライト色
 static float4 DiffuseColor[3]  = { MaterialDiffuse * float4(LightDiffuses[0], 1.0f)
 				 , MaterialDiffuse * float4(LightDiffuses[1], 1.0f)
@@ -318,6 +346,7 @@ static float3 AmbientColor[3]  = { saturate(MaterialAmbient * LightAmbients[0]) 
 static float3 SpecularColor[3] = { MaterialSpecular * LightSpeculars[0]
 				 , MaterialSpecular * LightSpeculars[1]
 				 , MaterialSpecular * LightSpeculars[2]};
+#endif // UE4LIKEIBL_ENABLED
 
 // オブジェクトのテクスチャ
 texture ObjectTexture: MATERIALTEXTURE;
@@ -435,26 +464,12 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	//スペキュラ色計算
 	float3 HalfVector;
 	float3 Specular = 0;
-
-#if UE4LIKEIBL_ENABLED
-    if (ULI_UseSpecular)
-    {
-        Specular = ULI_Specular;
-    }
-    else
-    {
-#endif // UE4LIKEIBL_ENABLED
-
 	for (int i = 0; i < 3; i++) {
 		if (LightEnables[i]) {
 			HalfVector = normalize( normalize(IN.Eye) + -LightDirection[i] );
 			Specular += pow( max(0,dot( HalfVector, normalize(IN.Normal) )), SpecularPower ) * SpecularColor[i];
 		}
 	}
-
-#if UE4LIKEIBL_ENABLED
-    }
-#endif // UE4LIKEIBL_ENABLED
 
 	// テクスチャ適用
 	if (useTexture) {
@@ -471,6 +486,22 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	}
 	// アルファ適用
 	Color.a = IN.Color.a * texColor.a;
+
+#if UE4LIKEIBL_ENABLED
+
+    float3 iblSpecular = 0;
+    iblSpecular.rgb = lerp(Specular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
+
+    float3 iblColor =
+        ULI_SpecularIBL(
+            iblSpecular,
+            ULI_Roughness,
+            normalize(IN.Normal),
+            normalize(IN.Eye));
+
+    Color.rgb += iblColor.rgb;
+
+#endif // UE4LIKEIBL_ENABLED
 
 	// セルフシャドウなしのトゥーン適用
 	float3 color;
@@ -498,25 +529,12 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 		}
 	}
 
-#if UE4LIKEIBL_ENABLED
-
-    float3 iblDiffuse = Color.rgb * (1 - ULI_Metallic);
-    float3 iblSpecular = lerp(Specular, Color.rgb, ULI_Metallic);
-
-    Color.rgb =
-        iblDiffuse +
-        ULI_ApproximateSpecularIBL(
-            iblSpecular,
-            ULI_Roughness,
-            normalize(IN.Normal),
-            normalize(IN.Eye));
-
-#else // UE4LIKEIBL_ENABLED
+#if !UE4LIKEIBL_ENABLED
 
 	// スペキュラ適用
 	Color.rgb += Specular;
 
-#endif // UE4LIKEIBL_ENABLED
+#endif // !UE4LIKEIBL_ENABLED
 
 	return Color;
 }
