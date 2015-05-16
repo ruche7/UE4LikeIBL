@@ -314,33 +314,36 @@ float3   LightSpeculars[MMM_LightCount]     : LIGHTSPECULARCOLORS;
 #if UE4LIKEIBL_ENABLED
 
 /// 補正済みマテリアルディフューズ色。
-static float4 ULI_IBLDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
+static float4 ULI_MatDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
+
+/// 補正済みマテリアルアンビエント色。
+static float3 ULI_MatAmbient = MaterialAmbient * (1 - ULI_Metallic);
+
+/// 補正済みマテリアルスペキュラ色。
+static float3 ULI_MatSpecular = MaterialSpecular * ULI_SpecularMul + ULI_SpecularAdd;
 
 /// 補正済み＆ライト適用済みディフューズ色。
 static float4 DiffuseColor[MMM_LightCount] =
     {
-        ULI_IBLDiffuse * float4(LightDiffuses[0], 1.0f),
-        ULI_IBLDiffuse * float4(LightDiffuses[1], 1.0f),
-        ULI_IBLDiffuse * float4(LightDiffuses[2], 1.0f),
+        ULI_MatDiffuse * float4(LightDiffuses[0], 1.0f),
+        ULI_MatDiffuse * float4(LightDiffuses[1], 1.0f),
+        ULI_MatDiffuse * float4(LightDiffuses[2], 1.0f),
     };
 
-/// ライト適用済みアンビエント色。
+/// 補正済み＆ライト適用済みアンビエント色。
 static float3 AmbientColor[MMM_LightCount] =
     {
-        saturate(MaterialAmbient * LightAmbients[0]) + MaterialEmmisive,
-        saturate(MaterialAmbient * LightAmbients[1]) + MaterialEmmisive,
-        saturate(MaterialAmbient * LightAmbients[2]) + MaterialEmmisive,
+        saturate(ULI_MatAmbient * LightAmbients[0]) + MaterialEmmisive,
+        saturate(ULI_MatAmbient * LightAmbients[1]) + MaterialEmmisive,
+        saturate(ULI_MatAmbient * LightAmbients[2]) + MaterialEmmisive,
     };
-
-/// 補正済みマテリアルスペキュラ色。
-static float3 ULI_IBLSpecular = MaterialSpecular * ULI_SpecularMul + ULI_SpecularAdd;
 
 /// 補正済み＆ライト適用済みスペキュラ色。
 static float3 SpecularColor[MMM_LightCount] =
     {
-        ULI_IBLSpecular * LightSpeculars[0],
-        ULI_IBLSpecular * LightSpeculars[1],
-        ULI_IBLSpecular * LightSpeculars[2],
+        ULI_MatSpecular * LightSpeculars[0],
+        ULI_MatSpecular * LightSpeculars[1],
+        ULI_MatSpecular * LightSpeculars[2],
     };
 
 #else // UE4LIKEIBL_ENABLED
@@ -498,7 +501,8 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 #if UE4LIKEIBL_ENABLED
 
     float3 iblSpecular = 0;
-    iblSpecular.rgb = lerp(Specular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
+    iblSpecular.rgb = (MaterialDiffuse.rgb + MaterialAmbient.rgb) * texColor.rgb;
+    iblSpecular.rgb = lerp(Specular.rgb, saturate(iblSpecular.rgb), ULI_Metallic);
 
     float3 iblColor =
         ULI_SpecularLighting(
