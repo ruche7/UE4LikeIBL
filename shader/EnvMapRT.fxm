@@ -14,91 +14,6 @@ float3 CameraPosition : CONTROLOBJECT < string name = "(OffscreenOwner)"; >;
 /// ワールドマトリクス。
 float4x4 WorldMatrix : WORLD;
 
-/// @brief キューブ面ごとのビューマトリクス。
-///
-/// eye == カメラ位置
-/// at  == 注視点
-/// up  == 上方向ベクトル
-///
-/// zaxis == at - eye
-/// xaxis == cross(up, zaxis)
-/// yaxis == cross(zaxis, xaxis)
-///
-/// trans == float3(-dot(xaxis, eye), -dot(yaxis, eye), -dot(zaxis, eye))
-///
-/// view == float4x4( xaxis.x, yaxis.x, zaxis.x, 0,
-///                   xaxis.y, yaxis.y, zaxis.y, 0,
-///                   xaxis.z, yaxis.z, zaxis.z, 0,
-///                   trans.x, trans.y, trans.z, 1 )
-static float4x4 ViewMatrixOfFaces[6] =
-    {
-        // +X
-        float4x4(
-            float4( 0, 0,+1, 0),
-            float4( 0,+1, 0, 0),
-            float4(-1, 0, 0, 0),
-            float4(
-                -dot(float3( 0, 0,-1), CameraPosition),
-                -dot(float3( 0,+1, 0), CameraPosition),
-                -dot(float3(+1, 0, 0), CameraPosition),
-                1)),
-
-        // -X
-        float4x4(
-            float4( 0, 0,-1, 0),
-            float4( 0,+1, 0, 0),
-            float4(+1, 0, 0, 0),
-            float4(
-                -dot(float3( 0, 0,+1), CameraPosition),
-                -dot(float3( 0,+1, 0), CameraPosition),
-                -dot(float3(-1, 0, 0), CameraPosition),
-                1)),
-
-        // +Y
-        float4x4(
-            float4(+1, 0, 0, 0),
-            float4( 0, 0,+1, 0),
-            float4( 0,-1, 0, 0),
-            float4(
-                -dot(float3(+1, 0, 0), CameraPosition),
-                -dot(float3( 0, 0,-1), CameraPosition),
-                -dot(float3( 0,+1, 0), CameraPosition),
-                1)),
-
-        // -Y
-        float4x4(
-            float4(+1, 0, 0, 0),
-            float4( 0, 0,-1, 0),
-            float4( 0,+1, 0, 0),
-            float4(
-                -dot(float3(+1, 0, 0), CameraPosition),
-                -dot(float3( 0, 0,+1), CameraPosition),
-                -dot(float3( 0,-1, 0), CameraPosition),
-                1)),
-
-        // +Z
-        float4x4(
-            float4(+1, 0, 0, 0),
-            float4( 0,+1, 0, 0),
-            float4( 0, 0,+1, 0),
-            float4(
-                -dot(float3(+1, 0, 0), CameraPosition),
-                -dot(float3( 0,+1, 0), CameraPosition),
-                -dot(float3( 0, 0,+1), CameraPosition),
-                1)),
-
-        // -Z
-        float4x4(
-            float4(-1, 0, 0, 0),
-            float4( 0,+1, 0, 0),
-            float4( 0, 0,-1, 0),
-            float4(
-                -dot(float3(-1, 0, 0), CameraPosition),
-                -dot(float3( 0,+1, 0), CameraPosition),
-                -dot(float3( 0, 0,-1), CameraPosition),
-                1)),
-    };
-
 /// @brief プロジェクションマトリクス。視野角 90° 。
 ///
 /// fov    == 視野角 90°
@@ -130,6 +45,64 @@ float4x4 ProjMatrix =
             (UE4LIKEIBL_ENVMAP_FAR) /
             ((UE4LIKEIBL_ENVMAP_FAR) - (UE4LIKEIBL_ENVMAP_NEAR)),
             0));
+
+/// キューブ面ごとの方向ベクトル。
+float3 DirectionOfFaces[6] =
+    {
+        float3(+1,  0,  0), // +X
+        float3(-1,  0,  0), // -X
+        float3( 0, +1,  0), // +Y
+        float3( 0, -1,  0), // -Y
+        float3( 0,  0, +1), // +Z
+        float3( 0,  0, -1), // -Z
+    };
+
+/// @brief キューブ面ごとのビューマトリクスを作成する。
+/// @param[in] face 面インデックス。
+/// @return ビューマトリクス。
+float4x4 MakeViewMatrix(uniform int face)
+{
+    // eye == カメラ位置
+    // at  == 注視点
+    // up  == 上方向ベクトル
+    //
+    // zaxis == at - eye
+    // xaxis == cross(up, zaxis)
+    // yaxis == cross(zaxis, xaxis)
+    //
+    // trans == float3(-dot(xaxis, eye), -dot(yaxis, eye), -dot(zaxis, eye))
+    //
+    // view == float4x4( xaxis.x, yaxis.x, zaxis.x, 0,
+    //                   xaxis.y, yaxis.y, zaxis.y, 0,
+    //                   xaxis.z, yaxis.z, zaxis.z, 0,
+    //                   trans.x, trans.y, trans.z, 1 )
+
+    float3 z_axis = DirectionOfFaces[face];
+    float3 x_axis = float3(abs(z_axis.y) + z_axis.z, 0, -z_axis.x);
+    float3 y_axis = float3(0, abs(z_axis.x + z_axis.z), -z_axis.y);
+
+    return
+        float4x4(
+            float4(x_axis.x, y_axis.x, z_axis.x, 0),
+            float4(x_axis.y, y_axis.y, z_axis.y, 0),
+            float4(x_axis.z, y_axis.z, z_axis.z, 0),
+            float4(
+                -dot(x_axis, CameraPosition),
+                -dot(y_axis, CameraPosition),
+                -dot(z_axis, CameraPosition),
+                1));
+}
+
+/// キューブ面ごとのビューマトリクス。
+static float4x4 ViewMatrixOfFaces[6] =
+    {
+        MakeViewMatrix(0),
+        MakeViewMatrix(1),
+        MakeViewMatrix(2),
+        MakeViewMatrix(3),
+        MakeViewMatrix(4),
+        MakeViewMatrix(5),
+    };
 
 /// キューブ面ごとのワールドビュープロジェクションマトリクス。
 static float4x4 WorldViewProjMatrixOfFaces[6] =
@@ -186,65 +159,29 @@ float4 CalcPositionForCube(float4 pos, uniform int face)
     return mul(mul(pos, CubeScaleMatrix), trans);
 }
 
-/// クリッピング判定における許容誤差。
-#define UE4LIKEIBL_ENVMAP_CLIP_DIFF 0.01f
+/// @brief クリッピング判定 cos 値。
+///
+/// 正確には cos(45°) ≒ 0.70710678… だが、エッジ対策で少しだけ許容角度を取る。
+#define UE4LIKEIBL_ENVMAP_CLIP_COS 0.7068f
 
 /// @brief ピクセルシェーダに渡されたカメラの相対位置を基にクリッピング判定を行う。
 /// @param[in] eye ピクセルシェーダに渡されたカメラの相対位置。
 /// @param[in] face 面インデックス。
-/// @return クリッピング範囲内ならば true 。範囲外ならば false 。
-bool ClipForCube(float3 eye, uniform int face)
+void ClipForCube(float3 eye, uniform int face)
 {
-    float3 a = abs(eye);
-    if (face == 0)
-    {
-        // +X
-        return (
-            eye.x < UE4LIKEIBL_ENVMAP_CLIP_DIFF     &&
-            a.x + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.y &&
-            a.x + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.z);
-    }
-    if (face == 1)
-    {
-        // -X
-        return (
-            eye.x > -UE4LIKEIBL_ENVMAP_CLIP_DIFF    &&
-            a.x + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.y &&
-            a.x + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.z);
-    }
-    if (face == 2)
-    {
-        // +Y
-        return (
-            eye.y < UE4LIKEIBL_ENVMAP_CLIP_DIFF     &&
-            a.y + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.x &&
-            a.y + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.z);
-    }
-    if (face == 3)
-    {
-        // -Y
-        return (
-            eye.y > -UE4LIKEIBL_ENVMAP_CLIP_DIFF    &&
-            a.y + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.x &&
-            a.y + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.z);
-    }
-    if (face == 4)
-    {
-        // +Z
-        return (
-            eye.z < UE4LIKEIBL_ENVMAP_CLIP_DIFF     &&
-            a.z + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.x &&
-            a.z + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.y);
-    }
-    if (face == 5)
-    {
-        // -Z
-        return (
-            eye.z > -UE4LIKEIBL_ENVMAP_CLIP_DIFF    &&
-            a.z + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.x &&
-            a.z + UE4LIKEIBL_ENVMAP_CLIP_DIFF > a.y);
-    }
-    return false;
+    // 対象面方向取得
+    float3 dir = DirectionOfFaces[face];
+
+    // X, Y, Z のうち 1 要素だけ 0 にするためのベクトルを作成
+    // +X 面や -X 面なら X 要素は 0 にしない
+    float3 ad = abs(dir);
+    float3 vdA = ad + ad.yzx;
+    float3 vdB = ad + ad.zxy;
+
+    // 対象面方向ともう1方向を軸とする2D平面へ投影した視線ベクトルと
+    // 対象面方向との角度が成す cos 値を算出して判定
+    clip(dot(dir, normalize(-eye * vdA)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
+    clip(dot(dir, normalize(-eye * vdB)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
 }
 
 /// @brief テクニックで全キューブ面を描画するためのスクリプトマクロ。
@@ -382,7 +319,6 @@ VS_OUTPUT Basic_VS(MMM_SKINNING_INPUT IN, uniform bool useTexture, uniform bool 
 {
 #if 1
     float4x4 ViewMatrix = ViewMatrixOfFaces[face];
-    float4x4 WorldViewProjMatrix = WorldViewProjMatrixOfFaces[face];
 #endif
 
 	VS_OUTPUT Out = (VS_OUTPUT)0;
@@ -405,6 +341,9 @@ VS_OUTPUT Basic_VS(MMM_SKINNING_INPUT IN, uniform bool useTexture, uniform bool 
 	}
 	else
 	{
+#if 1
+        float4x4 WorldViewProjMatrix = WorldViewProjMatrixOfFaces[face];
+#endif
 		Out.Pos = mul( SkinOut.Position, WorldViewProjMatrix );
 	}
 
@@ -467,7 +406,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 #endif
 {
 #if 1
-    clip(ClipForCube(IN.Eye, face) ? 1 : -1);
+    ClipForCube(IN.Eye, face);
 #endif
 
 	float4 Color = IN.Color;
@@ -704,7 +643,6 @@ float4 Edge_VS(MMM_SKINNING_INPUT IN) : POSITION
 #if 1
     EdgeShadowVSOutput Out = (EdgeShadowVSOutput)0;
     float4x4 ViewMatrix = ViewMatrixOfFaces[face];
-    float4x4 WorldViewProjMatrix = WorldViewProjMatrixOfFaces[face];
 #endif
 
 	//================================================================================
@@ -722,7 +660,7 @@ float4 Edge_VS(MMM_SKINNING_INPUT IN) : POSITION
 
 		position = position + float4(SkinOut.Normal, 0) * IN.EdgeWeight * EdgeWidth * distance(SkinOut.Position.xyz, CameraPosition) * MMM_GetDynamicFovEdgeRate(dist);
 #if 1
-	    Out.pos = mul( position, wvpmat );
+        Out.pos = mul( position, wvpmat );
 #else
 		return mul( position, wvpmat );
 #endif
@@ -731,7 +669,8 @@ float4 Edge_VS(MMM_SKINNING_INPUT IN) : POSITION
 	{
 		position = position + float4(SkinOut.Normal, 0) * IN.EdgeWeight * EdgeWidth * distance(SkinOut.Position.xyz, CameraPosition);
 #if 1
-	    Out.pos = mul( position, WorldViewProjMatrix );
+        float4x4 WorldViewProjMatrix = WorldViewProjMatrixOfFaces[face];
+        Out.pos = mul( position, WorldViewProjMatrix );
 #else
 		return mul( position, WorldViewProjMatrix );
 #endif
@@ -754,7 +693,8 @@ float4 Edge_PS() : COLOR
 #endif
 {
 #if 1
-    clip((EdgeWidth > 0 && ClipForCube(IN.eye, face)) ? 1 : -1);
+    clip(EdgeWidth - 0.000001f);
+    ClipForCube(IN.eye, face);
 #endif
 
 	// 輪郭色で塗りつぶし
@@ -839,7 +779,7 @@ float4 Shadow_PS() : COLOR
 #endif
 {
 #if 1
-    clip(ClipForCube(IN.eye, face) ? 1 : -1);
+    ClipForCube(IN.eye, face);
 #endif
 
     return GroundShadowColor;
