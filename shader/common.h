@@ -6,9 +6,11 @@
 #define UE4LIKEIBL_SHADER_COMMON_H
 
 /// π値。
-#define UE4LIKEIBL_PI 3.1415926f
+#define UE4LIKEIBL_PI 3.14159265359f
 
-/// 環境マップレンダリング面の縦横幅。実際にはこれの 4 倍の縦横幅になる。
+/// @brief 環境マップレンダリング面の縦横幅。 2 の累乗値。
+///
+/// 実際の幅や高さはこの値の 2 倍または 4 倍となる。
 #define UE4LIKEIBL_ENVMAP_SIZE 256
 
 /// 環境マップのテクスチャフォーマット。
@@ -34,8 +36,8 @@
 /// 環境マップのコピー先テクスチャとそのサンプラを定義するためのマクロ。
 #define UE4LIKEIBL_ENVMAP_DEF \
     shared texture2D ULI_EnvMap : RENDERCOLORTARGET < \
-        int Width = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE); \
-        int Height = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE); \
+        int Width = (UE4LIKEIBL_ENVMAP_SIZE) * 4; \
+        int Height = (UE4LIKEIBL_ENVMAP_SIZE) * 2; \
         string Format = UE4LIKEIBL_ENVMAP_FORMAT; \
         int Miplevels = 1; >; \
     sampler ULI_EnvMapSampler = sampler_state { \

@@ -57,64 +57,10 @@ UE4LIKEIBL_ENVMAP_DEF;
 /// @return サンプリング結果の色。
 float4 ULI_SampleEnvMap(float3 v)
 {
-    float2 pos = float2(0, 0);
-    float2 trans = float2(0, 0);
+    float tu = atan2(v.x, v.z) / UE4LIKEIBL_PI * 0.5f + 0.5f;
+    float tv = -atan2(v.y, length(v.xz)) / UE4LIKEIBL_PI + 0.5f;
 
-    float3 av = abs(v);
-    if (av.y > av.x && av.y > av.z)
-    {
-        if (v.y < 0)
-        {
-            // -Y
-            pos = float2(v.x / av.y, v.z / av.y);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY;
-        }
-        else
-        {
-            // +Y
-            pos = float2(v.x / av.y, -v.z / av.y);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY;
-        }
-    }
-    else if (av.x > av.z)
-    {
-        if (v.x < 0)
-        {
-            // -X
-            pos = float2(v.z / av.x, v.y / av.x);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX;
-        }
-        else
-        {
-            // +X
-            pos = float2(-v.z / av.x, v.y / av.x);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX;
-        }
-    }
-    else
-    {
-        if (v.z < 0)
-        {
-            // -Z
-            pos = float2(-v.x / av.z, v.y / av.z);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ;
-        }
-        else
-        {
-            // +Z
-            pos = float2(v.x / av.z, v.y / av.z);
-            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ;
-        }
-    }
-
-    // キューブの各面位置へ移動
-    pos = pos * (UE4LIKEIBL_ENVMAP_CUBE_SCALE) + trans;
-
-    // UV座標系に変換
-    pos.x = pos.x * 0.5f + 0.5f;
-    pos.y = -pos.y * 0.5f + 0.5f;
-
-    return tex2D(ULI_EnvMapSampler, pos);
+    return tex2D(ULI_EnvMapSampler, float2(tu, tv));
 }
 
 ////////////////////

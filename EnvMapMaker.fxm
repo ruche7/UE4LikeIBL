@@ -14,12 +14,15 @@ float Script : STANDARDSGLOBAL <
     string ScriptOrder = "postprocess";
 > = 0.8f;
 
+/// 環境マップのオフスクリーンレンダーターゲットの縦横幅。
+#define UE4LIKEIBL_EVNMAP_RT_WH ((UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE))
+
 /// 環境マップのオフスクリーンレンダーターゲット。
 texture EnvMapRT : OFFSCREENRENDERTARGET <
     string Description = "環境マップのレンダーターゲット";
-    int Width = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE);
-    int Height = (UE4LIKEIBL_ENVMAP_SIZE) / (UE4LIKEIBL_ENVMAP_CUBE_SCALE);
-    float4 ClearColor = float4(1, 1, 1, 1);
+    int Width = UE4LIKEIBL_EVNMAP_RT_WH;
+    int Height = UE4LIKEIBL_EVNMAP_RT_WH;
+    float4 ClearColor = float4(0, 0, 0, 0);
     float ClearDepth = 1;
     string Format = UE4LIKEIBL_ENVMAP_FORMAT;
     bool AntiAlias = false;
@@ -35,7 +38,7 @@ sampler EnvMapRTSampler =
         Texture = <EnvMapRT>;
         MinFilter = LINEAR;
         MagFilter = LINEAR;
-        AddressU = CLAMP;
+        AddressU = WRAP;
         AddressV = CLAMP;
     };
 
@@ -47,7 +50,7 @@ texture DepthBuffer : RENDERDEPTHSTENCILTARGET <
     float2 ViewportRatio = float2(1, 1); >;
 
 /// クリア色。
-float4 ClearColor = float4(1, 1, 1, 1);
+float4 ClearColor = float4(0, 0, 0, 1);
 
 /// クリア深度値。
 float ClearDepth = 1;
@@ -76,8 +79,91 @@ VSOutput RunVS(MMM_SKINNING_INPUT IN)
 /// ピクセルシェーダ処理を行う。
 float4 RunPS(float2 tex : TEXCOORD0) : COLOR
 {
-    // 単にオフスクリーンレンダーターゲットから色をコピーする
-    return tex2D(EnvMapRTSampler, tex);
+    // オフスクリーンレンダーターゲットには下記のようなキューブマップが貼られている。
+    //
+    // |  |+Y|  |  |
+    // |-X|+Z|+X|-Z|
+    // |  |-Y|  |  |
+    // |  |  |  |  |
+    //
+    // コピー先テクスチャが Equirectangular projection となるようにサンプリングする。
+    // コピー先テクスチャの中心点は +Z 面の中心点とする。
+
+    // V 成分は視線ベクトルとXZ平面との角度に線形対応
+    // V==0.0 => -π/2
+    // V==0.5 => 0
+    // V==1.0 => +π/2
+    float rv = (tex.y - 0.5f) * UE4LIKEIBL_PI;
+
+    // U 成分はXZ平面上における視線ベクトルと Z 軸との角度に線形対応
+    // U==0.0 => -π
+    // U==0.5 => 0
+    // U==1.0 => +π
+    float ru = (tex.x - 0.5f) * UE4LIKEIBL_PI * 2;
+
+    // 視線ベクトル作成
+    float3 v = float3(cos(rv) * sin(ru), -sin(rv), cos(rv) * cos(ru));
+
+    // 各面上における [(-1, -1), (+1, +1)] 座標と
+    // オフスクリーンレンダーターゲット上の各面への平行移動量を決定
+    float2 pos = float2(0, 0);
+    float2 trans = float2(0, 0);
+    float3 av = abs(v);
+    if (av.z > av.x && av.z > av.y)
+    {
+        if (v.z < 0)
+        {
+            // -Z
+            pos = float2(-v.x / av.z, v.y / av.z);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ;
+        }
+        else
+        {
+            // +Z
+            pos = float2(v.x / av.z, v.y / av.z);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ;
+        }
+    }
+    else if (av.y > av.x)
+    {
+        if (v.y < 0)
+        {
+            // -Y
+            pos = float2(v.x / av.y, v.z / av.y);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY;
+        }
+        else
+        {
+            // +Y
+            pos = float2(v.x / av.y, -v.z / av.y);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY;
+        }
+    }
+    else
+    {
+        if (v.x < 0)
+        {
+            // -X
+            pos = float2(v.z / av.x, v.y / av.x);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX;
+        }
+        else
+        {
+            // +X
+            pos = float2(-v.z / av.x, v.y / av.x);
+            trans = UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX;
+        }
+    }
+
+    // キューブの各面位置へ移動
+    pos = pos * (UE4LIKEIBL_ENVMAP_CUBE_SCALE) + trans;
+
+    // UV座標系に変換
+    pos.x = pos.x * 0.5f + 0.5f;
+    pos.y = -pos.y * 0.5f + 0.5f;
+
+    // キューブマップからサンプリング
+    return tex2D(EnvMapRTSampler, pos);
 }
 
 ////////////////////////////////////////
