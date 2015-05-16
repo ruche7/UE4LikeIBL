@@ -35,16 +35,17 @@ float ULI_Roughness <
     float UIMax = 1.0f;
 > = 0.0f;
 
-/// スペキュラ値をUIで指定するか。 true ならば後述の ULI_Specular を使う。
-bool ULI_UseSpecular <
-    string UIName = "UseSpecular";
-> = true;
-
-/// スペキュラカラー値。 ULI_UseSpecular が true ならば本来の値を上書きする。
-float3 ULI_Specular <
-    string UIName = "Specular";
+/// スペキュラカラー乗算値。マテリアルのスペキュラカラーに乗算する。
+float3 ULI_SpecularMul <
+    string UIName = "Specular*";
     string UIWidget = "Color";
-> = float3(0.5f, 0.5f, 0.5f);
+> = float3(1, 1, 1);
+
+/// スペキュラカラー加算値。 ULI_SpecularMul の乗算後に加算する。
+float3 ULI_SpecularAdd <
+    string UIName = "Specular+";
+    string UIWidget = "Color";
+> = float3(0, 0, 0);
 
 ////////////////////
 // 設定ここまで
@@ -238,7 +239,11 @@ float3 ULI_PrefilterEnvMap(
 /// @param[in] normal 法線ベクトル値。
 /// @param[in] eye 視点ベクトル値。
 /// @return 計算結果の色。
-float3 ULI_SpecularIBL(float3 specular, float roughness, float3 normal, float3 eye)
+float3 ULI_SpecularLighting(
+    float3 specular,
+    float roughness,
+    float3 normal,
+    float3 eye)
 {
     float3 color =
         ULI_PrefilterEnvMap(roughness, normal, eye, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
@@ -308,10 +313,10 @@ float3   LightSpeculars[MMM_LightCount]     : LIGHTSPECULARCOLORS;
 
 #if UE4LIKEIBL_ENABLED
 
-/// メタリック補正済みのマテリアルディフューズ色。
+/// 補正済みマテリアルディフューズ色。
 static float4 ULI_IBLDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
 
-/// メタリック補正済み＆ライト適用済みディフューズ色。
+/// 補正済み＆ライト適用済みディフューズ色。
 static float4 DiffuseColor[MMM_LightCount] =
     {
         ULI_IBLDiffuse * float4(LightDiffuses[0], 1.0f),
@@ -327,12 +332,15 @@ static float3 AmbientColor[MMM_LightCount] =
         saturate(MaterialAmbient * LightAmbients[2]) + MaterialEmmisive,
     };
 
-/// ライト適用済みスペキュラ色。
+/// 補正済みマテリアルスペキュラ色。
+static float3 ULI_IBLSpecular = MaterialSpecular * ULI_SpecularMul + ULI_SpecularAdd;
+
+/// 補正済み＆ライト適用済みスペキュラ色。
 static float3 SpecularColor[MMM_LightCount] =
     {
-        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[0],
-        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[1],
-        (ULI_UseSpecular ? ULI_Specular : MaterialSpecular) * LightSpeculars[2],
+        ULI_IBLSpecular * LightSpeculars[0],
+        ULI_IBLSpecular * LightSpeculars[1],
+        ULI_IBLSpecular * LightSpeculars[2],
     };
 
 #else // UE4LIKEIBL_ENABLED
@@ -493,7 +501,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
     iblSpecular.rgb = lerp(Specular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
 
     float3 iblColor =
-        ULI_SpecularIBL(
+        ULI_SpecularLighting(
             iblSpecular,
             ULI_Roughness,
             normalize(IN.Normal),
