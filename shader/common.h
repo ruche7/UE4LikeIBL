@@ -47,8 +47,11 @@
         AddressU = WRAP; \
         AddressV = CLAMP; }
 
+/// 環境マップのサンプリングUVを事前計算した Look-up テクスチャファイルパス。
+#define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_NAME "texture/lookup_envmap.dds"
+
 /// 環境BRDF項を事前計算した Look-up テクスチャファイルパス。
-#define UE4LIKEIBL_LUT_NAME "texture/lut.dds"
+#define UE4LIKEIBL_BRDF_TEX_NAME "texture/lookup_brdf.dds"
 
 /// Hammersley のY座標を事前計算したテクスチャファイルパス。
 #define UE4LIKEIBL_HAMMERSLEY_Y_TEX_NAME "texture/hammersley_y.dds"

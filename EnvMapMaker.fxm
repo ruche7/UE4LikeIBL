@@ -102,7 +102,8 @@ float4 RunPS(float2 tex : TEXCOORD0) : COLOR
     float ru = (tex.x - 0.5f) * UE4LIKEIBL_PI * 2;
 
     // 視線ベクトル作成
-    float3 v = float3(cos(rv) * sin(ru), -sin(rv), cos(rv) * cos(ru));
+    float cos_rv = cos(rv);
+    float3 v = float3(cos_rv * sin(ru), -sin(rv), cos_rv * cos(ru));
 
     // 各面上における [(-1, -1), (+1, +1)] 座標と
     // オフスクリーンレンダーターゲット上の各面への平行移動量を決定

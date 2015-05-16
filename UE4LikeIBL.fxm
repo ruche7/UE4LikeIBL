@@ -52,15 +52,62 @@ float3 ULI_Specular <
 // 環境マップのコピー先テクスチャ＆サンプラ定義
 UE4LIKEIBL_ENVMAP_DEF;
 
+/// 環境マップのサンプリングに事前計算した Look-up テクスチャを使うか否か。
+#define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED 1
+
+#if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
+
+/// 環境マップのサンプリングUVを事前計算した Look-up テクスチャ。
+texture2D ULI_EnvMapLookupTexture <
+    string ResourceName = UE4LIKEIBL_ENVMAP_LOOKUP_TEX_NAME; >;
+
+/// 環境マップのサンプリングUVを事前計算した Look-up テクスチャのサンプラ。
+sampler ULI_EnvMapLookupSampler =
+    sampler_state
+    {
+        Texture = <ULI_EnvMapLookupTexture>;
+        MinFilter = LINEAR;
+        MagFilter = LINEAR;
+        AddressU = CLAMP;
+        AddressV = CLAMP;
+    };
+
+#endif // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
+
 /// @brief 環境マップをサンプリングする。
 /// @param[in] v サンプリング先を示すベクトル。
 /// @return サンプリング結果の色。
 float4 ULI_SampleEnvMap(float3 v)
 {
+#if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
+
+    float3 nv = normalize(v);
+
+    // Look-up テクスチャ U 座標 [0, 1] ⇔ 単位視線ベクトル Z [-1, 1]
+    // Look-up テクスチャ V 座標 [0, 1] ⇔ 単位視線ベクトル Y [-1, 1]
+    float2 look = float2(nv.z * 0.5f + 0.5f, nv.y * 0.5f + 0.5f);
+
+    // Look-up テクスチャ画素値 R ⇔ 環境マップ U 座標
+    // Look-up テクスチャ画素値 G ⇔ 環境マップ V 座標
+    // いずれも単位視線ベクトルの X 値が正数の場合の値
+    float2 tuv = tex2D(ULI_EnvMapLookupSampler, look).rg;
+
+    // 単位視線ベクトルの X 値が負数の場合は U 座標を逆転させる
+    if (nv.x < 0)
+    {
+        tuv.x = 1 - tuv.x;
+    }
+
+    return tex2D(ULI_EnvMapSampler, tuv);
+
+#else // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
+
     float tu = atan2(v.x, v.z) / UE4LIKEIBL_PI * 0.5f + 0.5f;
     float tv = -atan2(v.y, length(v.xz)) / UE4LIKEIBL_PI + 0.5f;
 
     return tex2D(ULI_EnvMapSampler, float2(tu, tv));
+
+#endif // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
 }
 
 ////////////////////
@@ -70,13 +117,13 @@ float4 ULI_SampleEnvMap(float3 v)
 ////////////////////
 
 /// 環境BRDF項を事前計算した Look-up テクスチャ。
-texture2D ULI_LookUpTexture < string ResourceName = UE4LIKEIBL_LUT_NAME; >;
+texture2D ULI_BRDFTexture < string ResourceName = UE4LIKEIBL_BRDF_TEX_NAME; >;
 
 /// 環境BRDF項を事前計算した Look-up テクスチャのサンプラ。
-sampler ULI_LookUpTexSampler =
+sampler ULI_BRDFTexSampler =
     sampler_state
     {
-        Texture = <ULI_LookUpTexture>;
+        Texture = <ULI_BRDFTexture>;
         MinFilter = LINEAR;
         MagFilter = LINEAR;
         AddressU = CLAMP;
@@ -89,7 +136,7 @@ sampler ULI_LookUpTexSampler =
 /// @return 環境BRDF項。
 float2 ULI_IntegrateBRDF(float roughness, float nvDot)
 {
-    return tex2D(ULI_LookUpTexSampler, float2(nvDot, roughness)).rg;
+    return tex2D(ULI_BRDFTexSampler, float2(nvDot, roughness)).rg;
 }
 
 /// Hammersley のY座標を事前計算したテクスチャ。
