@@ -1,9 +1,11 @@
 /// @file
-/// @brief UE4LikeIBL エフェクトのメインシェーダコード。
+/// @brief UE4っぽい感じのIBLっぽいエフェクト。
 /// @author ルーチェ
-/// @date 2015-05-10
 ///
-/// UE4のIBLを強引に組み込んでみるテスト。
+/// ルートディレクトリから include される前提で記述されている。
+///
+/// UE4LIKEIBL_ENVMAP_ID を環境マップテクスチャIDとする。
+/// 未定義ならば 0 で定義される。
 
 /// エフェクト有効フラグ。無効にすると SampleBase.fxm と同等の処理になる。
 #define UE4LIKEIBL_ENABLED 1
@@ -11,6 +13,11 @@
 #if UE4LIKEIBL_ENABLED
 
 #include "shader/common.h"
+
+// UE4LIKEIBL_ENVMAP_ID 定義
+#ifndef UE4LIKEIBL_ENVMAP_ID
+#define UE4LIKEIBL_ENVMAP_ID 0
+#endif // UE4LIKEIBL_ENVMAP_ID
 
 /// 環境マップのサンプリングに事前計算した Look-up テクスチャを用いるか否か。
 #define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED 1
@@ -54,7 +61,7 @@ float3 ULI_SpecularAdd <
 ////////////////////
 
 // 環境マップのコピー先テクスチャ＆サンプラ定義
-UE4LIKEIBL_ENVMAP_DEF;
+UE4LIKEIBL_ENVMAP_DEF(UE4LIKEIBL_ENVMAP_ID);
 
 #if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
 

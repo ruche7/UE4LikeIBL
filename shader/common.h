@@ -33,15 +33,16 @@
 #define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ float2(-0.25, +0.25)
 #define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ float2(+0.75, +0.25)
 
-/// 環境マップのコピー先テクスチャとそのサンプラを定義するためのマクロ。
-#define UE4LIKEIBL_ENVMAP_DEF \
-    shared texture2D ULI_EnvMap : RENDERCOLORTARGET < \
+/// @brief 環境マップのコピー先テクスチャとそのサンプラを定義するためのマクロ。
+/// @param[in] id テクスチャ識別ID。
+#define UE4LIKEIBL_ENVMAP_DEF(id) \
+    shared texture2D ULI_EnvMap_##id : RENDERCOLORTARGET < \
         int Width = (UE4LIKEIBL_ENVMAP_SIZE) * 4; \
         int Height = (UE4LIKEIBL_ENVMAP_SIZE) * 2; \
         string Format = UE4LIKEIBL_ENVMAP_FORMAT; \
         int Miplevels = 1; >; \
     sampler ULI_EnvMapSampler = sampler_state { \
-        Texture = <ULI_EnvMap>; \
+        Texture = <ULI_EnvMap_##id>; \
         MinFilter = LINEAR; \
         MagFilter = LINEAR; \
         AddressU = WRAP; \

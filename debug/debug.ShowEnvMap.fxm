@@ -7,7 +7,7 @@
 #include "../shader/common.h"
 
 // 環境マップのコピー先テクスチャ＆サンプラ定義
-UE4LIKEIBL_ENVMAP_DEF;
+UE4LIKEIBL_ENVMAP_DEF(0);
 
 // 以下は SampleBase.fxm をコピペしてコード変更したもの。
 // 変更箇所は #if ～ #endif で括られている。
