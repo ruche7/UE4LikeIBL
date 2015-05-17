@@ -56,6 +56,14 @@ float3 ULI_SpecularAdd <
     string UIWidget = "Color";
 > = float3(0, 0, 0);
 
+/// アンビエントカラー乗算値。マテリアルのアンビエントカラーに乗算する。
+float ULI_AmbientMul <
+    string UIName = "Ambient*";
+    string UIWidget = "Slider";
+    float UIMin = 0.0f;
+    float UIMax = 2.0f;
+> = 1.0f;
+
 ////////////////////
 // 設定ここまで
 ////////////////////
@@ -326,7 +334,7 @@ float3   LightSpeculars[MMM_LightCount]     : LIGHTSPECULARCOLORS;
 static float4 ULI_MatDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
 
 /// 補正済みマテリアルアンビエント色。
-static float3 ULI_MatAmbient = MaterialAmbient * (1 - ULI_Metallic);
+static float3 ULI_MatAmbient = MaterialAmbient * ULI_AmbientMul;
 
 /// 補正済みマテリアルスペキュラ色。
 static float3 ULI_MatSpecular = MaterialSpecular * ULI_SpecularMul + ULI_SpecularAdd;
@@ -345,14 +353,6 @@ static float3 AmbientColor[MMM_LightCount] =
         saturate(ULI_MatAmbient * LightAmbients[0]) + MaterialEmmisive,
         saturate(ULI_MatAmbient * LightAmbients[1]) + MaterialEmmisive,
         saturate(ULI_MatAmbient * LightAmbients[2]) + MaterialEmmisive,
-    };
-
-/// 補正済み＆ライト適用済みスペキュラ色。
-static float3 SpecularColor[MMM_LightCount] =
-    {
-        saturate(ULI_MatSpecular * LightSpeculars[0]),
-        saturate(ULI_MatSpecular * LightSpeculars[1]),
-        saturate(ULI_MatSpecular * LightSpeculars[2]),
     };
 
 #else // UE4LIKEIBL_ENABLED
@@ -481,6 +481,8 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	float4 texColor = float4(1,1,1,1);
 	float  texAlpha = MultiplyTexture.a + AddingTexture.a;
 
+#if !UE4LIKEIBL_ENABLED
+
 	//スペキュラ色計算
 	float3 HalfVector;
 	float3 Specular = 0;
@@ -490,6 +492,8 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 			Specular += pow( max(0,dot( HalfVector, normalize(IN.Normal) )), SpecularPower ) * SpecularColor[i];
 		}
 	}
+
+#endif // !UE4LIKEIBL_ENABLED
 
 	// テクスチャ適用
 	if (useTexture) {
@@ -509,13 +513,12 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 
 #if UE4LIKEIBL_ENABLED
 
-    float3 iblSpecular = 0;
-    iblSpecular.rgb = (MaterialDiffuse.rgb + MaterialAmbient.rgb) * texColor.rgb;
-    iblSpecular.rgb = lerp(Specular.rgb, saturate(iblSpecular.rgb), ULI_Metallic);
+    float3 iblColor = 0;
 
-    float3 iblColor =
+    iblColor.rgb = lerp(ULI_MatSpecular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
+    iblColor =
         ULI_SpecularLighting(
-            iblSpecular,
+            iblColor,
             ULI_Roughness,
             normalize(IN.Normal),
             normalize(IN.Eye));
