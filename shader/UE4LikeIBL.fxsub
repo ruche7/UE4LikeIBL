@@ -48,13 +48,13 @@ float ULI_SpecularMul <
     string UIWidget = "Slider";
     float UIMin = 0.0f;
     float UIMax = 10.0f;
-> = 1.0f;
+> = 0.0f;
 
 /// スペキュラカラー加算値。 ULI_SpecularMul の乗算後に加算する。
 float3 ULI_SpecularAdd <
     string UIName = "Specular+";
     string UIWidget = "Color";
-> = float3(0, 0, 0);
+> = float3(0.5f, 0.5f, 0.5f);
 
 /// アンビエントカラー乗算値。マテリアルのアンビエントカラーに乗算する。
 float ULI_AmbientMul <
@@ -511,7 +511,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 
     // スペキュラ色決定
     // Metallic 成分が大きいほど材質の色に近づける
-    iblColor.rgb = lerp(ULI_MatSpecular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
+    iblColor.rgb = lerp(ULI_MatSpecular.rgb * 0.08f, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
 
     // 加算スフィアはスペキュラ色に加算してみる
     // 髪のテカリに使われていることが多いため
