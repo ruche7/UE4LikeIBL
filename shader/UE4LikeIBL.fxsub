@@ -191,21 +191,19 @@ float2 ULI_Hammersley(uniform uint index, uniform uint sampleCount)
 
 /// @brief インポータンスサンプリング計算を行う。
 /// @param[in] xi 座標値。
-/// @param[in] roughness ラフネス値。
-/// @param[in] normal 法線ベクトル値。
+/// @param[in] r4 ラフネス値の4乗。
+/// @param[in] normal 正規化済みの法線ベクトル値。
 /// @return 計算結果のベクトル値。
 ///
 /// 参考文献: SIGGRAPH 2013 Course: Physically Based Shading in Theory and Practice
 /// http://blog.selfshadow.com/publications/s2013-shading-course/
-float3  ULI_ImportanceSampleGGX(float2 xi, float roughness, float3 normal)
+float3  ULI_ImportanceSampleGGX(float2 xi, float r4, float3 normal)
 {
-    float a = roughness * roughness;
-
     float phi = 2 * UE4LIKEIBL_PI * xi.x;
-    float cosTheta = sqrt((1 - xi.y) / (1 + (a * a - 1) * xi.y));
+    float cosTheta = sqrt((1 - xi.y) / (1 + (r4 - 1) * xi.y));
     float sinTheta = sqrt(1 - cosTheta * cosTheta);
 
-    float3 upVec = (abs(normal.z) < 0.999f) ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 upVec = (abs(normal.y) < 0.999f) ? float3(0, 1, 0) : float3(0, 0, 1);
     float3 tanX = normalize(cross(upVec, normal));
     float3 tanY = cross(normal, tanX);
 
@@ -217,14 +215,14 @@ float3  ULI_ImportanceSampleGGX(float2 xi, float roughness, float3 normal)
 
 /// @brief UE4の事前フィルタリングされた環境マップに相当する色をサンプリングする。
 /// @param[in] roughness ラフネス値。
-/// @param[in] normal 法線ベクトル値。
-/// @param[in] eye 視点ベクトル値。
+/// @param[in] normal 正規化済みの法線ベクトル値。
+/// @param[in] eye 正規化済みの視点ベクトル値。
 /// @param[in] sampleCount 総サンプリング数。
 /// @return サンプリング結果の色。
 ///
 /// 参考文献: SIGGRAPH 2013 Course: Physically Based Shading in Theory and Practice
 /// http://blog.selfshadow.com/publications/s2013-shading-course/
-float3 ULI_PrefilterEnvMap(
+float3 ULI_FilterEnvMap(
     float roughness,
     float3 normal,
     float3 eye,
@@ -233,10 +231,13 @@ float3 ULI_PrefilterEnvMap(
     float3 color = 0;
     float weight = 0;
 
+    float r2 = roughness * roughness;
+    float r4 = r2 * r2;
+
     for (uint i = 0; i < sampleCount; ++i)
     {
         float2 xi = ULI_Hammersley(i, sampleCount);
-        float3 h = ULI_ImportanceSampleGGX(xi, roughness, normal);
+        float3 h = ULI_ImportanceSampleGGX(xi, r4, normal);
         float3 l = 2 * dot(eye, h) * h - eye;
 
         float nlDot = saturate(dot(normal, l));
@@ -247,14 +248,14 @@ float3 ULI_PrefilterEnvMap(
         }
     }
 
-    return (weight > 0) ? (color / weight) : color;
+    return (color / max(weight, 0.001f));
 }
 
 /// @brief スペキュラIBL計算を行う。
 /// @param[in] specular スペキュラ色。
 /// @param[in] roughness ラフネス値。
-/// @param[in] normal 法線ベクトル値。
-/// @param[in] eye 視点ベクトル値。
+/// @param[in] normal 正規化済みの法線ベクトル値。
+/// @param[in] eye 正規化済みの視点ベクトル値。
 /// @return 計算結果の色。
 float3 ULI_SpecularLighting(
     float3 specular,
@@ -263,7 +264,7 @@ float3 ULI_SpecularLighting(
     float3 eye)
 {
     float3 color =
-        ULI_PrefilterEnvMap(roughness, normal, eye, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
+        ULI_FilterEnvMap(roughness, normal, eye, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
     float2 brdf = ULI_IntegrateBRDF(roughness, saturate(dot(normal, eye)));
 
     color.rgb *= (specular.rgb * brdf.x) + (saturate(specular.g * 50) * brdf.y);
@@ -502,30 +503,45 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	}
 	Color.rgb *= texColor.rgb;
 
+#if UE4LIKEIBL_ENABLED
+
+    float3 iblColor = 0;
+    float3 iblN = normalize(IN.Normal);
+    float3 iblV = normalize(IN.Eye);
+
+    // スペキュラ色決定
+    // Metallic 成分が大きいほど材質の色に近づける
+    iblColor.rgb = lerp(ULI_MatSpecular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
+
+    // 加算スフィアはスペキュラ色に加算してみる
+    // 髪のテカリに使われていることが多いため
+    // Roughness が大きくなるとほとんどテカらなくなってしまうが…
+    if (useSphereMap && spadd)
+    {
+        iblColor.rgb += tex2D(ObjSphareSampler, IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb;
+    }
+
+    // IBL計算して結果を加算
+    iblColor = ULI_SpecularLighting(iblColor, ULI_Roughness, iblN, iblV);
+    Color.rgb += iblColor.rgb;
+
+    // 乗算スフィアはここで適用
+    if (useSphereMap && !spadd)
+    {
+        Color.rgb *= tex2D(ObjSphareSampler, IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb;
+    }
+
+#else // UE4LIKEIBL_ENABLED
 	// スフィアマップ適用
 	if ( useSphereMap ) {
 		// スフィアマップ適用
 		if(spadd) Color.rgb = Color.rgb + (tex2D(ObjSphareSampler,IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb);
 		else      Color.rgb = Color.rgb * (tex2D(ObjSphareSampler,IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb);
 	}
+#endif // UE4LIKEIBL_ENABLED
+
 	// アルファ適用
 	Color.a = IN.Color.a * texColor.a;
-
-#if UE4LIKEIBL_ENABLED
-
-    float3 iblColor = 0;
-
-    iblColor.rgb = lerp(ULI_MatSpecular.rgb, MaterialDiffuse.rgb * texColor.rgb, ULI_Metallic);
-    iblColor =
-        ULI_SpecularLighting(
-            iblColor,
-            ULI_Roughness,
-            normalize(IN.Normal),
-            normalize(IN.Eye));
-
-    Color.rgb += iblColor.rgb;
-
-#endif // UE4LIKEIBL_ENABLED
 
 	// セルフシャドウなしのトゥーン適用
 	float3 color;
