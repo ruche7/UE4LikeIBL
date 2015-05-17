@@ -1,6 +1,6 @@
 /// @file
 /// @brief キューブ環境マップをレンダリングする。
-/// @author ruche
+/// @author ルーチェ
 
 #include "common.h"
 
