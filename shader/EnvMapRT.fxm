@@ -184,11 +184,16 @@ void ClipForCube(float3 eye, uniform int face)
     clip(dot(dir, normalize(-eye * vdB)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
 }
 
+/// 背景色。
+float4 BackGroundColor : BACKGROUNDCOLOR;
+
 /// @brief テクニックで全キューブ面を描画するためのスクリプトマクロ。
 /// @param[in] baseName パスのベース名。
 #define UE4LIKEIBL_TEC_SCRIPT_DEF(baseName) \
     "RenderColorTarget0=;" \
     "RenderDepthStencilTarget=;" \
+    "ClearSetColor=BackGroundColor;" \
+    "Clear=Color;" \
     "Pass=" #baseName "0;" \
     "Pass=" #baseName "1;" \
     "Pass=" #baseName "2;" \
