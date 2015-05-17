@@ -100,22 +100,22 @@ IBLエフェクトはいくつかのパラメータを持っています。
 
 ## ライセンスとか
 
-* MMD界隈的にはライセンス云々の話は野暮ったいと思いますが、
-  Unreal Engine 4 のシェーダコードを大いに参考にしていることもあり、
-  当エフェクトに含まれるすべてのコードはMITライセンスとしています。
+* 当エフェクトに含まれるすべてのコードはMITライセンスとしています。
     * Copyright (C) 2015 ルーチェ  
       Released under the MIT license  
       http://opensource.org/licenses/mit-license.php
-* また、 Unreal Engine 4 のEULAにも従います。
+* また、 Unreal Engine 4 のシェーダコードを大いに参考にしているため、
+  面倒なことにならないよう Unreal Engine 4 のライセンスにも従います。
     * UNREAL ENGINE END USER LICENSE AGREEMENT  
       https://www.unrealengine.com/eula
-* 非商用で利用する分には特に気にする必要はありません。
-* 商用利用は Unreal Engine 4 のEULAに従ってください。
+* 非商用で利用するだけなら特に気にする必要はありません。
+  動画作成でもシェーダの勉強でもご自由にどうぞ。
+* 商用利用は Unreal Engine 4 のライセンスに従ってください。
     * 公式のFAQ: https://www.unrealengine.com/ja/ja-eula-faq
     * 動画の作成に利用するだけならロイヤリティは発生しないようです。
 * エフェクトコードの改変や、自作のエフェクトへのコピペは自由です。
 * 改変やコピペしたエフェクトコードを配布する場合、
-  MITライセンスおよび Unreal Engine 4 のEULAに従ってください。
+  MITライセンスおよび Unreal Engine 4 のライセンスに従ってください。
     * 前述の著作権およびMITライセンスの表記を配布物のどこかに含めてください。
     * コピーレフトなライセンス(GPL等)にしないでください。
 * 改変せずに再配布する場合も上記と同様ですが、
