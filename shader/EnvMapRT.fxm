@@ -184,8 +184,11 @@ void ClipForCube(float3 eye, uniform int face)
     clip(dot(dir, normalize(-eye * vdB)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
 }
 
-/// 背景色。
+/// 背景色。クリアに用いる。
 float4 BackGroundColor : BACKGROUNDCOLOR;
+
+/// 深度ステンシルクリア用。
+float ClearDepth = 1;
 
 /// @brief テクニックで全キューブ面を描画するためのスクリプトマクロ。
 /// @param[in] baseName パスのベース名。
@@ -193,7 +196,9 @@ float4 BackGroundColor : BACKGROUNDCOLOR;
     "RenderColorTarget0=;" \
     "RenderDepthStencilTarget=;" \
     "ClearSetColor=BackGroundColor;" \
+    "ClearSetDepth=ClearDepth;" \
     "Clear=Color;" \
+    "Clear=Depth;" \
     "Pass=" #baseName "0;" \
     "Pass=" #baseName "1;" \
     "Pass=" #baseName "2;" \
