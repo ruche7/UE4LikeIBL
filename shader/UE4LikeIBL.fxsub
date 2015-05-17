@@ -43,10 +43,12 @@ float ULI_Roughness <
 > = 0.0f;
 
 /// スペキュラカラー乗算値。マテリアルのスペキュラカラーに乗算する。
-float3 ULI_SpecularMul <
+float ULI_SpecularMul <
     string UIName = "Specular*";
-    string UIWidget = "Color";
-> = float3(1, 1, 1);
+    string UIWidget = "Slider";
+    float UIMin = 0.0f;
+    float UIMax = 10.0f;
+> = 1.0f;
 
 /// スペキュラカラー加算値。 ULI_SpecularMul の乗算後に加算する。
 float3 ULI_SpecularAdd <
@@ -348,9 +350,9 @@ static float3 AmbientColor[MMM_LightCount] =
 /// 補正済み＆ライト適用済みスペキュラ色。
 static float3 SpecularColor[MMM_LightCount] =
     {
-        ULI_MatSpecular * LightSpeculars[0],
-        ULI_MatSpecular * LightSpeculars[1],
-        ULI_MatSpecular * LightSpeculars[2],
+        saturate(ULI_MatSpecular * LightSpeculars[0]),
+        saturate(ULI_MatSpecular * LightSpeculars[1]),
+        saturate(ULI_MatSpecular * LightSpeculars[2]),
     };
 
 #else // UE4LIKEIBL_ENABLED
