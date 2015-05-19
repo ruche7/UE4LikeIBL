@@ -42,7 +42,12 @@ texture EnvMapRT : OFFSCREENRENDERTARGET <
     int Miplevels = 1;
     string DefaultEffect =
         "self=hide;"
-        "*=shader/EnvMapRT.fxm;"; >;
+#ifdef MIKUMIKUMOVING
+        "*=shader/EnvMapRT_MMM.fx;";
+#else // MIKUMIKUMOVING
+        "*=shader/EnvMapRT_MME.fx;";
+#endif // MIKUMIKUMOVING
+    >;
 
 /// 環境マップのオフスクリーンレンダーターゲットのサンプラ。
 sampler EnvMapRTSampler =
@@ -63,7 +68,11 @@ texture DepthBuffer : RENDERDEPTHSTENCILTARGET <
     float2 ViewportRatio = float2(1, 1); >;
 
 /// クリア色。
-float4 ClearColor = float4(0, 0, 0, 1);
+#ifdef MIKUMIKUMOVING
+float4 ClearColor : BACKGROUNDCOLOR;
+#else // MIKUMIKUMOVING
+float4 ClearColor = float4(1, 1, 1, 1);
+#endif // MIKUMIKUMOVING
 
 /// クリア深度値。
 float ClearDepth = 1;
@@ -98,12 +107,12 @@ struct VSOutput
 };
 
 /// 頂点シェーダ処理を行う。
-VSOutput RunVS(MMM_SKINNING_INPUT IN)
+VSOutput RunVS(float4 pos : POSITION, float2 tex : TEXCOORD0)
 {
     VSOutput vsOut = (VSOutput)0;
 
-    vsOut.pos = IN.Pos;
-    vsOut.tex = IN.Tex;
+    vsOut.pos = pos;
+    vsOut.tex = tex;
 
     return vsOut;
 }
@@ -231,7 +240,6 @@ technique Effect <
 {
     pass DrawEnvMap < string Script = "Draw=Buffer;"; >
     {
-        AlphaBlendEnable = false;
         VertexShader = compile vs_3_0 RunVS();
         PixelShader = compile ps_3_0 RunPS();
     }

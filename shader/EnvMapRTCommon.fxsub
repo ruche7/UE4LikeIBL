@@ -1,0 +1,276 @@
+/// @file
+/// @brief キューブ環境マップレンダリング用の共通処理。
+/// @author ルーチェ
+///
+/// EnvMapRT_*.fx の冒頭で include される前提で記述されている。
+
+#include "common.h"
+
+/// カメラ位置。(＝環境マップの中心点)
+float3 CameraPosition : CONTROLOBJECT < string name = "(OffscreenOwner)"; >;
+
+/// ワールドマトリクス。
+float4x4 WorldMatrix : WORLD;
+
+/// @brief プロジェクションマトリクス。視野角 90° 。
+///
+/// fov    == 視野角 90°
+/// aspect == アスペクト比 1.0
+///
+/// h  == cot(fov/2) == cos(45°)/sin(45°) == +1
+/// w  == h / aspect == +1
+/// zn == UE4LIKEIBL_ENVMAP_NEAR
+/// zf == UE4LIKEIBL_ENVMAP_FAR
+///
+/// proj == float4x4( w, 0,              0, 0,
+///                   0, h,              0, 0,
+///                   0, 0,     zf/(zf-zn), 1,
+///                   0, 0, -zn*zf/(zf-zn), 0 )
+float4x4 ProjMatrix =
+    float4x4(
+        float4(+1, 0, 0, 0),
+        float4( 0,+1, 0, 0),
+        float4(
+            0,
+            0,
+            (UE4LIKEIBL_ENVMAP_FAR) /
+            ((UE4LIKEIBL_ENVMAP_FAR) - (UE4LIKEIBL_ENVMAP_NEAR)),
+            1),
+        float4(
+            0,
+            0,
+            -(UE4LIKEIBL_ENVMAP_NEAR) *
+            (UE4LIKEIBL_ENVMAP_FAR) /
+            ((UE4LIKEIBL_ENVMAP_FAR) - (UE4LIKEIBL_ENVMAP_NEAR)),
+            0));
+
+/// キューブ面ごとの方向ベクトル。
+float3 DirectionOfFaces[6] =
+    {
+        float3(+1,  0,  0), // +X
+        float3(-1,  0,  0), // -X
+        float3( 0, +1,  0), // +Y
+        float3( 0, -1,  0), // -Y
+        float3( 0,  0, +1), // +Z
+        float3( 0,  0, -1), // -Z
+    };
+
+/// @brief キューブ面ごとのビューマトリクスを作成する。
+/// @param[in] face 面インデックス。
+/// @return ビューマトリクス。
+float4x4 MakeViewMatrix(uniform int face)
+{
+    // eye == カメラ位置
+    // at  == 注視点
+    // up  == 上方向ベクトル
+    //
+    // zaxis == at - eye
+    // xaxis == cross(up, zaxis)
+    // yaxis == cross(zaxis, xaxis)
+    //
+    // trans == float3(-dot(xaxis, eye), -dot(yaxis, eye), -dot(zaxis, eye))
+    //
+    // view == float4x4( xaxis.x, yaxis.x, zaxis.x, 0,
+    //                   xaxis.y, yaxis.y, zaxis.y, 0,
+    //                   xaxis.z, yaxis.z, zaxis.z, 0,
+    //                   trans.x, trans.y, trans.z, 1 )
+
+    float3 z_axis = DirectionOfFaces[face];
+    float3 x_axis = float3(abs(z_axis.y) + z_axis.z, 0, -z_axis.x);
+    float3 y_axis = float3(0, abs(z_axis.x + z_axis.z), -z_axis.y);
+
+    return
+        float4x4(
+            float4(x_axis.x, y_axis.x, z_axis.x, 0),
+            float4(x_axis.y, y_axis.y, z_axis.y, 0),
+            float4(x_axis.z, y_axis.z, z_axis.z, 0),
+            float4(
+                -dot(x_axis, CameraPosition),
+                -dot(y_axis, CameraPosition),
+                -dot(z_axis, CameraPosition),
+                1));
+}
+
+/// キューブ面ごとのビューマトリクス。
+static float4x4 ViewMatrixOfFaces[6] =
+    {
+        MakeViewMatrix(0),
+        MakeViewMatrix(1),
+        MakeViewMatrix(2),
+        MakeViewMatrix(3),
+        MakeViewMatrix(4),
+        MakeViewMatrix(5),
+    };
+
+/// キューブ面ごとのワールドビュープロジェクションマトリクス。
+static float4x4 WorldViewProjMatrixOfFaces[6] =
+    {
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[0]), ProjMatrix),
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[1]), ProjMatrix),
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[2]), ProjMatrix),
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[3]), ProjMatrix),
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[4]), ProjMatrix),
+        mul(mul(WorldMatrix, ViewMatrixOfFaces[5]), ProjMatrix),
+    };
+
+/// キューブの各面レンダリング位置へのスケーリングマトリクス。
+float4x4 CubeScaleMatrix =
+    float4x4(
+        float4(UE4LIKEIBL_ENVMAP_CUBE_SCALE,                            0, 0, 0),
+        float4(                           0, UE4LIKEIBL_ENVMAP_CUBE_SCALE, 0, 0),
+        float4(                           0,                            0, 1, 0),
+        float4(                           0,                            0, 0, 1));
+
+/// キューブの各面レンダリング位置への X, Y 並行移動量。
+float2 CubeTranslateOfFaces[6] =
+    {
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX,
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX,
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY,
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY,
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ,
+        UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ,
+    };
+
+/// @brief 射影変換済みの座標をキューブの各面レンダリング位置へ移動させる。
+/// @param[in] pos 射影変換済みの座標。
+/// @param[in] face 面インデックス。
+/// @return 各面レンダリング位置へ移動させた座標。
+///
+/// 各面は下記のような配置でレンダリングされる。
+/// 原点は +Z, +X, -Y の3面の中心である。
+///
+/// |  |+Y|  |  |
+/// |-X|+Z|+X|-Z|
+/// |  |-Y|  |  |
+/// |  |  |  |  |
+///
+/// まず 1/4 にスケーリングした後、目的の位置へ平行移動させる。
+float4 CalcPositionForCube(float4 pos, uniform int face)
+{
+    float4x4 trans =
+        float4x4(
+            float4(1, 0, 0, 0),
+            float4(0, 1, 0, 0),
+            float4(0, 0, 1, 0),
+            float4(CubeTranslateOfFaces[face], 0, 1));
+    return mul(mul(pos, CubeScaleMatrix), trans);
+}
+
+/// @brief クリッピング判定 cos 値。
+///
+/// 正確には cos(45°) ≒ 0.70710678… だが、エッジ対策で少しだけ許容角度を取る。
+#define UE4LIKEIBL_ENVMAP_CLIP_COS 0.7068f
+
+/// @brief ピクセルシェーダに渡されたカメラの相対位置を基にクリッピング判定を行う。
+/// @param[in] eye ピクセルシェーダに渡されたカメラの相対位置。
+/// @param[in] face 面インデックス。
+void ClipForCube(float3 eye, uniform int face)
+{
+    // 対象面方向取得
+    float3 dir = DirectionOfFaces[face];
+
+    // X, Y, Z のうち 1 要素だけ 0 にするためのベクトルを作成
+    // +X 面や -X 面なら X 要素は 0 にしない
+    float3 ad = abs(dir);
+    float3 vdA = ad + ad.yzx;
+    float3 vdB = ad + ad.zxy;
+
+    // 対象面方向ともう1方向を軸とする2D平面へ投影した視線ベクトルと
+    // 対象面方向との角度が成す cos 値を算出して判定
+    clip(dot(dir, normalize(-eye * vdA)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
+    clip(dot(dir, normalize(-eye * vdB)) - (UE4LIKEIBL_ENVMAP_CLIP_COS));
+}
+
+/// 輪郭と地面影の頂点シェーダ出力構造体。
+struct EdgeShadowVSOutput
+{
+    float4 pos : POSITION;  ///< 射影変換座標。
+    float3 eye : TEXCOORD3; ///< カメラとの相対位置。
+};
+
+/// @brief テクニックで全キューブ面を描画するためのスクリプトマクロ。
+/// @param[in] baseName パスのベース名。
+#define UE4LIKEIBL_TEC_SCRIPT_DEF(baseName) \
+    "RenderColorTarget0=;" \
+    "RenderDepthStencilTarget=;" \
+    "Pass=" #baseName "0;" \
+    "Pass=" #baseName "1;" \
+    "Pass=" #baseName "2;" \
+    "Pass=" #baseName "3;" \
+    "Pass=" #baseName "4;" \
+    "Pass=" #baseName "5;"
+
+/// @brief オブジェクト描画テクニックの各キューブ面パスを定義するためのマクロ。
+/// @param[in] u_tex テクスチャ有効フラグ。
+/// @param[in] u_sph スフィアマップ有効フラグ。
+/// @param[in] u_toon トゥーン有効フラグ。
+/// @param[in] u_ss セルフシャドウ有効フラグ。
+/// @param[in] face 面インデックス。
+#define UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,face) \
+    pass DrawObject##face { \
+        VertexShader = compile vs_3_0 Object_VS(u_tex, u_sph, u_toon, u_ss, face); \
+        PixelShader = compile ps_3_0 Object_PS(u_tex, u_sph, u_toon, u_ss, face); }
+
+/// @brief オブジェクト描画テクニックを定義するためのマクロ。
+/// @param[in] u_tex テクスチャ有効フラグ。
+/// @param[in] u_sph スフィアマップ有効フラグ。
+/// @param[in] u_toon トゥーン有効フラグ。
+/// @param[in] u_ss セルフシャドウ有効フラグ。
+#define UE4LIKEIBL_MAIN_TEC_DEF(u_tex,u_sph,u_toon,u_ss) \
+    technique MainTec_##u_tex##u_sph##u_toon##u_ss < \
+        string MMDPass = "object"; \
+        bool UseTexture = u_tex; \
+        bool UseSphereMap = u_sph; \
+        bool UseToon = u_toon; \
+        bool UseSelfShadow = u_ss; \
+        string Script = UE4LIKEIBL_TEC_SCRIPT_DEF(DrawObject); \
+    > { \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,0) \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,1) \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,2) \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,3) \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,4) \
+        UE4LIKEIBL_DRAWOBJECT_PASS_DEF(u_tex,u_sph,u_toon,u_ss,5) }
+
+/// @brief 輪郭描画テクニックの各キューブ面パスを定義するためのマクロ。
+/// @param[in] face 面インデックス。
+#define UE4LIKEIBL_DRAWEDGE_PASS_DEF(face) \
+    pass DrawEdge##face { \
+        AlphaBlendEnable = false; \
+        AlphaTestEnable = false; \
+        VertexShader = compile vs_3_0 Edge_VS(face); \
+        PixelShader = compile ps_3_0 Edge_PS(face); }
+
+/// 輪郭描画テクニックを定義するためのマクロ。
+#define UE4LIKEIBL_EDGE_TEC_DEF \
+    technique EdgeTec < \
+        string MMDPass = "edge"; \
+        string Script = UE4LIKEIBL_TEC_SCRIPT_DEF(DrawEdge); \
+    > { \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(0) \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(1) \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(2) \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(3) \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(4) \
+        UE4LIKEIBL_DRAWEDGE_PASS_DEF(5) }
+
+/// @brief 影描画テクニックの各キューブ面パスを定義するためのマクロ。
+/// @param[in] face 面インデックス。
+#define UE4LIKEIBL_DRAWSHADOW_PASS_DEF(face) \
+    pass DrawShadow##face { \
+        VertexShader = compile vs_3_0 Shadow_VS(face); \
+        PixelShader = compile ps_3_0 Shadow_PS(face); }
+
+/// 影描画テクニックを定義するためのマクロ。
+#define UE4LIKEIBL_SHADOW_TEC_DEF \
+    technique ShadowTec < \
+        string MMDPass = "shadow"; \
+        string Script = UE4LIKEIBL_TEC_SCRIPT_DEF(DrawShadow); \
+    > { \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(0) \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(1) \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(2) \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(3) \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(4) \
+        UE4LIKEIBL_DRAWSHADOW_PASS_DEF(5) }
