@@ -2,25 +2,10 @@
 /// @brief UE4っぽい感じのIBLっぽいエフェクト。
 /// @author ルーチェ
 ///
+/// MikuMikuMoving 用。
 /// ルートディレクトリから include される前提で記述されている。
-///
-/// UE4LIKEIBL_ENVMAP_ID を環境マップテクスチャIDとする。
-/// 未定義ならば 0 で定義される。
 
-/// エフェクト有効フラグ。無効にすると SampleBase.fxm と同等の処理になる。
-#define UE4LIKEIBL_ENABLED 1
-
-#if UE4LIKEIBL_ENABLED
-
-#include "shader/common.h"
-
-// UE4LIKEIBL_ENVMAP_ID 定義
-#ifndef UE4LIKEIBL_ENVMAP_ID
-#define UE4LIKEIBL_ENVMAP_ID 0
-#endif // UE4LIKEIBL_ENVMAP_ID
-
-/// 環境マップのサンプリングに事前計算した Look-up テクスチャを用いるか否か。
-#define UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED 1
+#include "shader/UE4LikeIBLCommon.fxsub"
 
 ////////////////////
 // 設定ここから
@@ -67,216 +52,6 @@ float ULI_AmbientMul <
 ////////////////////
 // 設定ここまで
 ////////////////////
-// 環境マップ関連定義ここから
-////////////////////
-
-// 環境マップのコピー先テクスチャ＆サンプラ定義
-UE4LIKEIBL_ENVMAP_DEF(UE4LIKEIBL_ENVMAP_ID);
-
-#if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
-
-/// 環境マップのサンプリングUVを事前計算した Look-up テクスチャ。
-texture2D ULI_EnvMapLookupTexture <
-    string ResourceName = UE4LIKEIBL_ENVMAP_LOOKUP_TEX_NAME; >;
-
-/// 環境マップのサンプリングUVを事前計算した Look-up テクスチャのサンプラ。
-sampler ULI_EnvMapLookupSampler =
-    sampler_state
-    {
-        Texture = <ULI_EnvMapLookupTexture>;
-        MinFilter = LINEAR;
-        MagFilter = LINEAR;
-        AddressU = CLAMP;
-        AddressV = CLAMP;
-    };
-
-#endif // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
-
-/// @brief 環境マップをサンプリングする。
-/// @param[in] v サンプリング先を示すベクトル。
-/// @return サンプリング結果の色。
-float4 ULI_SampleEnvMap(float3 v)
-{
-#if UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
-
-    float3 nv = normalize(v);
-
-    // Look-up テクスチャ U 座標 [0, 1] ⇔ 単位視線ベクトル Z [-1, 1]
-    // Look-up テクスチャ V 座標 [0, 1] ⇔ 単位視線ベクトル Y [-1, 1]
-    float2 look = float2(nv.z * 0.5f + 0.5f, nv.y * 0.5f + 0.5f);
-
-    // Look-up テクスチャ画素値 R ⇔ 環境マップ U 座標
-    // Look-up テクスチャ画素値 G ⇔ 環境マップ V 座標
-    // いずれも単位視線ベクトルの X 値が正数の場合の値
-    float2 tuv = tex2D(ULI_EnvMapLookupSampler, look).rg;
-
-    // 単位視線ベクトルの X 値が負数の場合は U 座標を逆転させる
-    if (nv.x < 0)
-    {
-        tuv.x = 1 - tuv.x;
-    }
-
-    return tex2D(ULI_EnvMapSampler, tuv);
-
-#else // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
-
-    float tu = atan2(v.x, v.z) / UE4LIKEIBL_PI * 0.5f + 0.5f;
-    float tv = -atan2(v.y, length(v.xz)) / UE4LIKEIBL_PI + 0.5f;
-
-    return tex2D(ULI_EnvMapSampler, float2(tu, tv));
-
-#endif // UE4LIKEIBL_ENVMAP_LOOKUP_TEX_ENABLED
-}
-
-////////////////////
-// 環境マップ関連定義ここまで
-////////////////////
-// IBL関連処理定義ここから
-////////////////////
-
-/// 環境BRDF項を事前計算した Look-up テクスチャ。
-texture2D ULI_BRDFTexture < string ResourceName = UE4LIKEIBL_BRDF_TEX_NAME; >;
-
-/// 環境BRDF項を事前計算した Look-up テクスチャのサンプラ。
-sampler ULI_BRDFTexSampler =
-    sampler_state
-    {
-        Texture = <ULI_BRDFTexture>;
-        MinFilter = LINEAR;
-        MagFilter = LINEAR;
-        AddressU = CLAMP;
-        AddressV = CLAMP;
-    };
-
-/// @brief Look-up テクスチャから環境BRDF項を取得する。
-/// @param[in] roughness ラフネス値。
-/// @param[in] nvDot 法線ベクトルと視点ベクトルとの内積値。
-/// @return 環境BRDF項。
-float2 ULI_IntegrateBRDF(float roughness, float nvDot)
-{
-    return tex2D(ULI_BRDFTexSampler, float2(nvDot, roughness)).rg;
-}
-
-/// Hammersley のY座標を事前計算したテクスチャ。
-texture2D ULI_HammersleyYTexture <
-    string ResourceName = UE4LIKEIBL_HAMMERSLEY_Y_TEX_NAME; >;
-
-/// Hammersley のY座標を事前計算したテクスチャのサンプラ。
-sampler ULI_HammersleyYTexSampler =
-    sampler_state
-    {
-        Texture = <ULI_HammersleyYTexture>;
-        MinFilter = POINT;
-        MagFilter = POINT;
-    };
-
-/// @brief テクスチャを利用して Hammerslay 座標値を求める。
-/// @param[in] index サンプリングインデックス値。
-/// @param[in] sampleCount 総サンプリング数。
-/// @return 座標値。
-///
-/// 参考文献: Hammersley Points on the Hemisphere
-/// http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
-float2 ULI_Hammersley(uniform uint index, uniform uint sampleCount)
-{
-    float2 tex =
-        float2(
-            (index + 0.5f) / (UE4LIKEIBL_HAMMERSLEY_Y_TEX_SAMPLE_COUNT),
-            0.5f);
-    return
-        float2(
-            float(index) / sampleCount,
-            tex2D(ULI_HammersleyYTexSampler, tex).r);
-}
-
-/// @brief インポータンスサンプリング計算を行う。
-/// @param[in] xi 座標値。
-/// @param[in] r4 ラフネス値の4乗。
-/// @param[in] normal 正規化済みの法線ベクトル値。
-/// @return 計算結果のベクトル値。
-///
-/// 参考文献: SIGGRAPH 2013 Course: Physically Based Shading in Theory and Practice
-/// http://blog.selfshadow.com/publications/s2013-shading-course/
-float3  ULI_ImportanceSampleGGX(float2 xi, float r4, float3 normal)
-{
-    float phi = 2 * UE4LIKEIBL_PI * xi.x;
-    float cosTheta = sqrt((1 - xi.y) / (1 + (r4 - 1) * xi.y));
-    float sinTheta = sqrt(1 - cosTheta * cosTheta);
-
-    float3 upVec = (abs(normal.y) < 0.999f) ? float3(0, 1, 0) : float3(0, 0, 1);
-    float3 tanX = normalize(cross(upVec, normal));
-    float3 tanY = cross(normal, tanX);
-
-    return (
-        (tanX * (sinTheta * cos(phi))) +
-        (tanY * (sinTheta * sin(phi))) +
-        (normal * cosTheta));
-}
-
-/// @brief UE4の事前フィルタリングされた環境マップに相当する色をサンプリングする。
-/// @param[in] roughness ラフネス値。
-/// @param[in] normal 正規化済みの法線ベクトル値。
-/// @param[in] eye 正規化済みの視点ベクトル値。
-/// @param[in] sampleCount 総サンプリング数。
-/// @return サンプリング結果の色。
-///
-/// 参考文献: SIGGRAPH 2013 Course: Physically Based Shading in Theory and Practice
-/// http://blog.selfshadow.com/publications/s2013-shading-course/
-float3 ULI_FilterEnvMap(
-    float roughness,
-    float3 normal,
-    float3 eye,
-    uniform uint sampleCount)
-{
-    float3 color = 0;
-    float weight = 0;
-
-    float r2 = roughness * roughness;
-    float r4 = r2 * r2;
-
-    for (uint i = 0; i < sampleCount; ++i)
-    {
-        float2 xi = ULI_Hammersley(i, sampleCount);
-        float3 h = ULI_ImportanceSampleGGX(xi, r4, normal);
-        float3 l = 2 * dot(eye, h) * h - eye;
-
-        float nlDot = saturate(dot(normal, l));
-        if (nlDot > 0)
-        {
-            color.rgb += ULI_SampleEnvMap(l).rgb * nlDot;
-            weight += nlDot;
-        }
-    }
-
-    return (color / max(weight, 0.001f));
-}
-
-/// @brief スペキュラIBL計算を行う。
-/// @param[in] specular スペキュラ色。
-/// @param[in] roughness ラフネス値。
-/// @param[in] normal 正規化済みの法線ベクトル値。
-/// @param[in] eye 正規化済みの視点ベクトル値。
-/// @return 計算結果の色。
-float3 ULI_SpecularLighting(
-    float3 specular,
-    float roughness,
-    float3 normal,
-    float3 eye)
-{
-    float3 color =
-        ULI_FilterEnvMap(roughness, normal, eye, UE4LIKEIBL_ENVMAP_SAMPLE_COUNT);
-    float2 brdf = ULI_IntegrateBRDF(roughness, saturate(dot(normal, eye)));
-
-    color.rgb *= (specular.rgb * brdf.x) + (saturate(specular.g * 50) * brdf.y);
-
-    return color;
-}
-
-////////////////////
-// IBL関連処理定義ここまで
-////////////////////
-
-#endif // UE4LIKEIBL_ENABLED
 
 // 以下は SampleBase.fxm をコピペしてコード変更したもの。
 // 変更箇所は #if ～ #endif で括られている。
@@ -329,7 +104,7 @@ float3   LightDiffuses[MMM_LightCount]      : LIGHTDIFFUSECOLORS;
 float3   LightAmbients[MMM_LightCount]      : LIGHTAMBIENTCOLORS;
 float3   LightSpeculars[MMM_LightCount]     : LIGHTSPECULARCOLORS;
 
-#if UE4LIKEIBL_ENABLED
+#if 1
 
 /// 補正済みマテリアルディフューズ色。
 static float4 ULI_MatDiffuse = MaterialDiffuse * (1 - ULI_Metallic);
@@ -356,7 +131,7 @@ static float3 AmbientColor[MMM_LightCount] =
         saturate(ULI_MatAmbient * LightAmbients[2]) + MaterialEmmisive,
     };
 
-#else // UE4LIKEIBL_ENABLED
+#else // 1
 // ライト色
 static float4 DiffuseColor[3]  = { MaterialDiffuse * float4(LightDiffuses[0], 1.0f)
 				 , MaterialDiffuse * float4(LightDiffuses[1], 1.0f)
@@ -367,7 +142,7 @@ static float3 AmbientColor[3]  = { saturate(MaterialAmbient * LightAmbients[0]) 
 static float3 SpecularColor[3] = { MaterialSpecular * LightSpeculars[0]
 				 , MaterialSpecular * LightSpeculars[1]
 				 , MaterialSpecular * LightSpeculars[2]};
-#endif // UE4LIKEIBL_ENABLED
+#endif // 1
 
 // オブジェクトのテクスチャ
 texture ObjectTexture: MATERIALTEXTURE;
@@ -482,7 +257,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	float4 texColor = float4(1,1,1,1);
 	float  texAlpha = MultiplyTexture.a + AddingTexture.a;
 
-#if !UE4LIKEIBL_ENABLED
+#if 0
 
 	//スペキュラ色計算
 	float3 HalfVector;
@@ -494,7 +269,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 		}
 	}
 
-#endif // !UE4LIKEIBL_ENABLED
+#endif // 0
 
 	// テクスチャ適用
 	if (useTexture) {
@@ -503,7 +278,7 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 	}
 	Color.rgb *= texColor.rgb;
 
-#if UE4LIKEIBL_ENABLED
+#if 1
 
     float3 iblColor = 0;
     float3 iblN = normalize(IN.Normal);
@@ -531,14 +306,14 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
         Color.rgb *= tex2D(ObjSphareSampler, IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb;
     }
 
-#else // UE4LIKEIBL_ENABLED
+#else // 1
 	// スフィアマップ適用
 	if ( useSphereMap ) {
 		// スフィアマップ適用
 		if(spadd) Color.rgb = Color.rgb + (tex2D(ObjSphareSampler,IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb);
 		else      Color.rgb = Color.rgb * (tex2D(ObjSphareSampler,IN.SubTex.zw).rgb * MultiplySphere.rgb + AddingSphere.rgb);
 	}
-#endif // UE4LIKEIBL_ENABLED
+#endif // 1
 
 	// アルファ適用
 	Color.a = IN.Color.a * texColor.a;
@@ -569,12 +344,12 @@ float4 Basic_PS(VS_OUTPUT IN, uniform bool useTexture, uniform bool useSphereMap
 		}
 	}
 
-#if !UE4LIKEIBL_ENABLED
+#if 0
 
 	// スペキュラ適用
 	Color.rgb += Specular;
 
-#endif // !UE4LIKEIBL_ENABLED
+#endif // 0
 
 	return Color;
 }

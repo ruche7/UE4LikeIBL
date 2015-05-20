@@ -15,7 +15,7 @@ REM // root effects
 xcopy /Y ..\*.fx* "%DEST_DIR%"
 
 REM // sub directories
-for %%a in (shader texture debug) do xcopy /I /Y "..\%%a" "%DEST_DIR%\%%a"
+for %%a in (shader texture) do xcopy /I /Y "..\%%a" "%DEST_DIR%\%%a"
 
 popd
 exit /b 0
