@@ -15,7 +15,11 @@
 #endif // UE4LIKEIBL_ENVMAP_ID
 
 /// Equirectangular projection マップへの変換用テクスチャを用いるか否か。
+#ifdef MIKUMIKUMOVING
 #define UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED 1
+#else // MIKUMIKUMOVING
+#define UE4LIKEIBL_ENVMAP_TRANS_TEX_ENABLED 0
+#endif // MIKUMIKUMOVING
 
 ////////////////////////////////////////
 // 変数定義
@@ -112,7 +116,7 @@ VSOutput RunVS(float4 pos : POSITION, float2 tex : TEXCOORD0)
     VSOutput vsOut = (VSOutput)0;
 
     vsOut.pos = pos;
-    vsOut.tex = tex;
+    vsOut.tex = tex + 0.5f / float2(UE4LIKEIBL_ENVMAP_WIDTH, UE4LIKEIBL_ENVMAP_HEIGHT);
 
     return vsOut;
 }

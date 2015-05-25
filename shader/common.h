@@ -11,7 +11,11 @@
 /// @brief 環境マップレンダリング面の縦横幅。 2 の累乗値。
 ///
 /// 実際の幅や高さはこの値の 2 倍または 4 倍となる。
+#ifdef MIKUMIKUMOVING
 #define UE4LIKEIBL_ENVMAP_SIZE 256
+#else // MIKUMIKUMOVING
+#define UE4LIKEIBL_ENVMAP_SIZE 128
+#endif // MIKUMIKUMOVING
 
 /// 環境マップのテクスチャフォーマット。
 #define UE4LIKEIBL_ENVMAP_FORMAT "A16B16G16R16F"
@@ -26,19 +30,25 @@
 #define UE4LIKEIBL_ENVMAP_CUBE_SCALE 0.25f
 
 // 環境マップのキューブ各面レンダリング位置への並行移動量。
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX float2(+0.25, +0.25)
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX float2(-0.75, +0.25)
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY float2(-0.25, +0.75)
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY float2(-0.25, -0.25)
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ float2(-0.25, +0.25)
-#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ float2(+0.75, +0.25)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PX float2(+0.25f, +0.25f)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NX float2(-0.75f, +0.25f)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PY float2(-0.25f, +0.75f)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NY float2(-0.25f, -0.25f)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_PZ float2(-0.25f, +0.25f)
+#define UE4LIKEIBL_ENVMAP_CUBE_TRANS_NZ float2(+0.75f, +0.25f)
+
+/// 環境マップのコピー先テクスチャ横幅。
+#define UE4LIKEIBL_ENVMAP_WIDTH ((UE4LIKEIBL_ENVMAP_SIZE) * 4)
+
+/// 環境マップのコピー先テクスチャ縦幅。
+#define UE4LIKEIBL_ENVMAP_HEIGHT ((UE4LIKEIBL_ENVMAP_SIZE) * 2)
 
 /// @brief 環境マップのコピー先テクスチャとそのサンプラを定義するためのマクロ。
 /// @param[in] id テクスチャ識別ID。
 #define UE4LIKEIBL_ENVMAP_DEF(id) \
     shared texture2D ULI_EnvMap_##id : RENDERCOLORTARGET < \
-        int Width = (UE4LIKEIBL_ENVMAP_SIZE) * 4; \
-        int Height = (UE4LIKEIBL_ENVMAP_SIZE) * 2; \
+        int Width = UE4LIKEIBL_ENVMAP_WIDTH; \
+        int Height = UE4LIKEIBL_ENVMAP_HEIGHT; \
         string Format = UE4LIKEIBL_ENVMAP_FORMAT; \
         int Miplevels = 1; >; \
     sampler ULI_EnvMapSampler = sampler_state { \
